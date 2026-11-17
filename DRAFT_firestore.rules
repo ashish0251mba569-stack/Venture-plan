@@ -1,0 +1,200 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ---------------------------------------------------------
+    // Global Hardened Primitives
+    // ---------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isEmailVerified() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isEmailVerified() && (
+        request.auth.token.email == 'ashish.0251mba569@dgu.ac.in' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // ---------------------------------------------------------
+    // Entity Validators
+    // ---------------------------------------------------------
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'email', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'email', 'photoURL', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.uid == request.auth.uid
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 200
+        && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 500))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAssessment(data) {
+      return data.keys().hasAll(['userId', 'stage', 'savings', 'goal', 'risk', 'score', 'sessionCompleted', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'stage', 'savings', 'goal', 'risk', 'score', 'sessionCompleted', 'createdAt', 'updatedAt'])
+        && isValidId(data.userId)
+        && data.userId == request.auth.uid
+        && data.stage in ['student', 'fresher', 'early_pro']
+        && data.savings in ['500-2000', '2000-5000', '5000-15000', '15000+']
+        && data.goal in ['emergency', 'short_term', 'wealth', 'basics']
+        && data.risk in ['low', 'moderate', 'high']
+        && data.score is int && data.score >= 0 && data.score <= 100
+        && data.sessionCompleted is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidWtpFeedback(data) {
+      return data.keys().hasAll(['userId', 'userEmail', 'choice', 'note', 'createdAt'])
+        && data.keys().hasOnly(['userId', 'userEmail', 'choice', 'note', 'createdAt'])
+        && isValidId(data.userId)
+        && data.userId == request.auth.uid
+        && data.userEmail is string && data.userEmail.size() >= 3 && data.userEmail.size() <= 200
+        && data.choice in ['yes_149', 'maybe_99', 'free_only']
+        && data.note is string && data.note.size() <= 500
+        && data.createdAt is timestamp;
+    }
+
+    function isValidValidationStats(data) {
+      return data.keys().hasAll(['visits', 'quizCompleted', 'sessionsCompleted', 'wtpTotal', 'wtpYes149', 'wtpMaybe99', 'wtpFreeOnly', 'updatedAt'])
+        && data.keys().hasOnly(['visits', 'quizCompleted', 'sessionsCompleted', 'wtpTotal', 'wtpYes149', 'wtpMaybe99', 'wtpFreeOnly', 'updatedAt'])
+        && data.visits is int && data.visits >= 0 && data.visits <= 100000000
+        && data.quizCompleted is int && data.quizCompleted >= 0 && data.quizCompleted <= 100000000
+        && data.sessionsCompleted is int && data.sessionsCompleted >= 0 && data.sessionsCompleted <= 100000000
+        && data.wtpTotal is int && data.wtpTotal >= 0 && data.wtpTotal <= 100000000
+        && data.wtpYes149 is int && data.wtpYes149 >= 0 && data.wtpYes149 <= 100000000
+        && data.wtpMaybe99 is int && data.wtpMaybe99 >= 0 && data.wtpMaybe99 <= 100000000
+        && data.wtpFreeOnly is int && data.wtpFreeOnly >= 0 && data.wtpFreeOnly <= 100000000
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidStatsIncrement() {
+      return incoming().visits >= existing().visits && incoming().visits <= existing().visits + 1
+        && incoming().quizCompleted >= existing().quizCompleted && incoming().quizCompleted <= existing().quizCompleted + 1
+        && incoming().sessionsCompleted >= existing().sessionsCompleted && incoming().sessionsCompleted <= existing().sessionsCompleted + 1
+        && incoming().wtpTotal >= existing().wtpTotal && incoming().wtpTotal <= existing().wtpTotal + 1
+        && incoming().wtpYes149 >= existing().wtpYes149 && incoming().wtpYes149 <= existing().wtpYes149 + 1
+        && incoming().wtpMaybe99 >= existing().wtpMaybe99 && incoming().wtpMaybe99 <= existing().wtpMaybe99 + 1
+        && incoming().wtpFreeOnly >= existing().wtpFreeOnly && incoming().wtpFreeOnly <= existing().wtpFreeOnly + 1;
+    }
+
+    // ---------------------------------------------------------
+    // Collections
+    // ---------------------------------------------------------
+
+    // Private user profiles (PII isolated to owner or verified admin)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'photoURL', 'updatedAt'])
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    // User Financial Confidence Check & Roadmap
+    match /assessments/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(userId)
+        && isOwner(userId)
+        && isValidAssessment(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId)
+        && isOwner(userId)
+        && isValidAssessment(incoming())
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action 1: Retake / update assessment answers
+          incoming().diff(existing()).affectedKeys().hasOnly(['stage', 'savings', 'goal', 'risk', 'score', 'sessionCompleted', 'updatedAt']) ||
+          // Action 2: Mark guidance session complete
+          (incoming().sessionCompleted == true && incoming().diff(existing()).affectedKeys().hasOnly(['sessionCompleted', 'updatedAt']))
+        );
+      allow delete: if isValidId(userId) && isOwner(userId);
+    }
+
+    // FinGuide Pro Willingness-to-Pay feedback
+    match /wtp_feedback/{feedbackId} {
+      allow get: if isValidId(feedbackId) && isEmailVerified() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isEmailVerified() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isValidId(feedbackId)
+        && isEmailVerified()
+        && isValidWtpFeedback(incoming())
+        && incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // Aggregated non-PII validation metrics (single document: summary)
+    match /validation_stats/{statsId} {
+      allow get: if isValidId(statsId) && statsId == 'summary' && isEmailVerified();
+      allow list: if false;
+      allow create: if isValidId(statsId)
+        && statsId == 'summary'
+        && isEmailVerified()
+        && isValidValidationStats(incoming())
+        && incoming().visits <= 1
+        && incoming().quizCompleted <= 1
+        && incoming().sessionsCompleted <= 1
+        && incoming().wtpTotal <= 1
+        && incoming().wtpYes149 <= 1
+        && incoming().wtpMaybe99 <= 1
+        && incoming().wtpFreeOnly <= 1
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(statsId)
+        && statsId == 'summary'
+        && isEmailVerified()
+        && isValidValidationStats(incoming())
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (isValidStatsIncrement() && incoming().diff(existing()).affectedKeys().hasOnly(['visits', 'quizCompleted', 'sessionsCompleted', 'wtpTotal', 'wtpYes149', 'wtpMaybe99', 'wtpFreeOnly', 'updatedAt']))
+        );
+      allow delete: if false;
+    }
+
+    // Admin role collection (server/console managed only)
+    match /admins/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list, create, update, delete: if false;
+    }
+  }
+}

@@ -1,0 +1,194 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user profile information stored privately per user.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "email": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 200
+        },
+        "photoURL": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "displayName", "email", "createdAt", "updatedAt"]
+    },
+    "FinancialAssessment": {
+      "title": "FinancialAssessment",
+      "description": "User's 4-step Financial Confidence Check answers, score, and completion status.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "stage": {
+          "type": "string",
+          "enum": ["student", "fresher", "early_pro"]
+        },
+        "savings": {
+          "type": "string",
+          "enum": ["500-2000", "2000-5000", "5000-15000", "15000+"]
+        },
+        "goal": {
+          "type": "string",
+          "enum": ["emergency", "short_term", "wealth", "basics"]
+        },
+        "risk": {
+          "type": "string",
+          "enum": ["low", "moderate", "high"]
+        },
+        "score": {
+          "type": "integer"
+        },
+        "sessionCompleted": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "userId",
+        "stage",
+        "savings",
+        "goal",
+        "risk",
+        "score",
+        "sessionCompleted",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "WtpFeedback": {
+      "title": "WtpFeedback",
+      "description": "Willingness-to-pay validation response for FinGuide Pro (Rs. 149/month).",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userEmail": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 200
+        },
+        "choice": {
+          "type": "string",
+          "enum": ["yes_149", "maybe_99", "free_only"]
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["userId", "userEmail", "choice", "note", "createdAt"]
+    },
+    "ValidationStats": {
+      "title": "ValidationStats",
+      "description": "Aggregated non-PII validation metrics for FinGuide AI MVP.",
+      "type": "object",
+      "properties": {
+        "visits": { "type": "integer" },
+        "quizCompleted": { "type": "integer" },
+        "sessionsCompleted": { "type": "integer" },
+        "wtpTotal": { "type": "integer" },
+        "wtpYes149": { "type": "integer" },
+        "wtpMaybe99": { "type": "integer" },
+        "wtpFreeOnly": { "type": "integer" },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "visits",
+        "quizCompleted",
+        "sessionsCompleted",
+        "wtpTotal",
+        "wtpYes149",
+        "wtpMaybe99",
+        "wtpFreeOnly",
+        "updatedAt"
+      ]
+    },
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Explicit admin access record.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 200
+        }
+      },
+      "required": ["uid", "email"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user profiles keyed by Firebase Auth UID."
+    },
+    "/assessments/{userId}": {
+      "schema": { "$ref": "#/entities/FinancialAssessment" },
+      "description": "Latest Financial Confidence Check assessment and roadmap per user."
+    },
+    "/wtp_feedback/{feedbackId}": {
+      "schema": { "$ref": "#/entities/WtpFeedback" },
+      "description": "Willingness-to-pay feedback submissions for FinGuide Pro."
+    },
+    "/validation_stats/{statsId}": {
+      "schema": { "$ref": "#/entities/ValidationStats" },
+      "description": "Aggregated non-PII validation counters (document ID: summary)."
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminUser" },
+      "description": "Admin role markers."
+    }
+  }
+}

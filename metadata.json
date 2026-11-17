@@ -1,0 +1,6 @@
+{
+  "name": "FinGuide AI",
+  "description": "Understand money and investments in simple language before you invest. Interactive Financial Confidence Check, Indian financial product comparisons, AI jargon buster, and SIP vs FD compounding simulator.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
